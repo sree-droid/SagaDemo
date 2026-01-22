@@ -1,83 +1,96 @@
-This project is a learning-focused implementation of the Saga pattern using a simple orchestration approach.
+**Saga + Outbox + Observability **
 
-The goal is not to provide a production-ready solution, but to understand how long-running workflows, partial failures, and compensating transactions behave in practice.
+This project is a learning-focused implementation of:
 
-What this project demonstrates
+* Saga pattern 
 
-A simple Saga Orchestrator
+* Transactional Outbox
 
-Explicit Saga state tracking in a database
+* Observability basics (correlation IDs + structured logs + debugging endpoints)
 
-Step-by-step workflow progression
+The goal is not a production-ready architecture, but to practice how workflows behave in success + failure paths — and how to debug them confidently when things go wrong.
 
-Compensation logic when a step fails
+**Why Observability was the next step**
 
-Use of an Outbox table to drive Saga progression
+After getting the Saga workflow working (including the failure + compensation path), I realized something important:
 
-Both success and failure paths executed end-to-end
+_Building the workflow is one thing.
+Understanding what happened when it fails is another._
 
-Business flow (simplified)
+So I added observability features to answer questions like:
 
-Order is created
+* “Where did the workflow fail?”
 
-Inventory is reserved
+* “Did it retry?”
 
-Payment is processed
+* “Did compensation run?”
 
-Success path
+* “Which logs belong to the same request/saga?”
 
-Order moves to Completed
+**Saga style: Orchestration **
 
-Saga finishes successfully
+This project uses an orchestrator-based Saga, meaning:
 
-Failure path
+* A central component tracks the workflow state
 
-Payment fails (simulated)
+* It decides the next step
 
-Inventory is released
+* It triggers compensating actions when something fails
 
-Order is cancelled
+In contrast, choreography-based Sagas have no central coordinator — services react to events independently. Orchestration was easier to reason about while learning and debugging.
 
-Saga ends in a failed state after compensation
+**What the workflow does**
 
-Key concepts explored
+* OrderCreated
 
-Why distributed workflows cannot rely on database rollbacks
+* InventoryReserved
 
-How compensating actions differ from transactions
+* PaymentProcessed
 
-Why Saga steps must be independently committed
+* OrderCompleted
 
-How state transitions make workflows observable
+**Failure path**
 
-How Outbox-driven processing improves reliability
+If payment fails:
 
-Why failure paths require intentional design
+* release inventory
 
-What I initially missed (and learned by building)
+* cancel order
 
-Success paths are straightforward; failure paths are not
+* saga ends in a failed state after compensation
 
-Compensation needs to be explicit and idempotent
+**Outbox Pattern**
 
-State visibility is critical for debugging and understanding flow
+Instead of publishing events directly after database updates, this project writes:
 
-Retrying work without care can cause duplicate side effects
+* business data (Orders/SagaInstances)
 
-Reading about the Saga pattern is very different from implementing it
+* outbox messages (OutboxMessages)
 
-Technical stack
+…in the same transaction.
 
-.NET Web API
+A background worker processes pending outbox rows and advances the saga.
 
-Entity Framework Core
+**Observability features**
+1) Correlation ID propagation
 
-SQL Server (LocalDB)
+* API accepts or generates a X-Correlation-Id
 
-BackgroundService for orchestration
+* Correlation ID is returned in the response header
 
-Transactional Outbox Pattern
+* Correlation ID is stored on outbox messages so async processing stays traceable
 
-Notes
+2) Structured logging with scopes
 
-This repository is intentionally kept simple and self-contained. It exists as a learning artifact, not a production reference.
+Logs are emitted with consistent context such as:
+
+* CorrelationId
+
+* SagaId
+
+* OrderId
+
+* Event type / step
+
+This makes it possible to follow a single request across:
+API → Outbox → Worker → Saga → Compensation
